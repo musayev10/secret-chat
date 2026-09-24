@@ -1,7 +1,7 @@
 import json
 import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI()
@@ -33,7 +33,7 @@ if os.path.exists(HISTORY_FILE):
 def save_history():
     try:
         with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(chat_history[-150:], f, ensure_ascii=False)
+            json.dump(chat_history[-200:], f, ensure_ascii=False)
     except Exception:
         pass
 
@@ -57,6 +57,32 @@ class ConnectionManager:
                 pass
 
 manager = ConnectionManager()
+
+# Service Worker для фонового режима PWA
+SW_SCRIPT = """
+self.addEventListener('install', (e) => {
+    self.skipWaiting();
+});
+
+self.addEventListener('activate', (e) => {
+    e.waitUntil(clients.claim());
+});
+
+self.addEventListener('push', (e) => {
+    const data = e.data ? e.data.json() : { title: 'Калькулятор', body: 'Новое сообщение' };
+    e.waitUntil(
+        self.registration.showNotification(data.title, {
+            body: data.body,
+            icon: 'https://cdn-icons-png.flaticon.com/512/3658/3658932.png',
+            vibrate: [200, 100, 200]
+        })
+    );
+});
+"""
+
+@app.get("/sw.js")
+async def get_sw():
+    return Response(content=SW_SCRIPT, media_type="application/javascript")
 
 @app.get("/manifest.json")
 async def get_manifest():
@@ -107,7 +133,8 @@ async def websocket_endpoint(websocket: WebSocket, device_key: str = ""):
             data["sender"] = user_role
 
             msg_type = data.get("type")
-            if msg_type in ["text", "image", "video", "audio"]:
+            # Сохраняем текстовые, медиа и записи вызовов в историю
+            if msg_type in ["text", "image", "video", "audio", "call_log"]:
                 chat_history.append(data)
                 save_history()
 
@@ -164,6 +191,7 @@ FAYE_HTML = """
         .msg { padding: 9px 13px; border-radius: 16px; max-width: 80%; font-size: 15px; word-break: break-word; line-height: 1.35; position: relative; }
         .my { background: #2b5278; align-self: flex-end; color: #fff; border-bottom-right-radius: 4px; }
         .their { background: #182533; align-self: flex-start; color: #f5f5f5; border-bottom-left-radius: 4px; }
+        .call-log-msg { align-self: center; background: rgba(23, 33, 43, 0.8); color: #7f91a4; font-size: 13px; border-radius: 12px; padding: 6px 14px; border: 1px solid rgba(255,255,255,0.05); }
         .msg img, .msg video { max-width: 100%; border-radius: 12px; margin-top: 4px; display: block; }
         .msg audio { max-width: 210px; height: 38px; margin-top: 4px; }
 
@@ -288,6 +316,12 @@ FAYE_HTML = """
         const MY_ROLE = 'faye';
         const SERVER_URL = (location.protocol==='https:'?'wss://':'ws://')+location.host+"/ws?device_key=key_faye_phone_7730";
         let ws, mediaRecorder, audioChunks = [], pc, localStream, pendingOffer = null, ringToneInterval = null;
+        let callStartTime = null;
+
+        // Регистрация Service Worker для PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW reg error:', err));
+        }
 
         function press(val) {
             const display = document.getElementById('display');
@@ -325,7 +359,7 @@ FAYE_HTML = """
 
                 if (data.sender === MY_ROLE) return;
 
-                if (["text", "image", "video", "audio"].includes(data.type)) {
+                if (["text", "image", "video", "audio", "call_log"].includes(data.type)) {
                     renderMessage(data);
                     playNotifSound();
                     showNotification(data);
@@ -346,6 +380,12 @@ FAYE_HTML = """
         function renderMessage(data) {
             const isMy = data.sender === MY_ROLE;
             const cls = isMy ? 'my' : 'their';
+
+            if (data.type === 'call_log') {
+                addCallLogMsg(data.text);
+                return;
+            }
+
             if (data.type === 'text') addMsg(data.text, cls);
             if (data.type === 'image') addMsg(`<img src="${data.src}">`, cls, true);
             if (data.type === 'video') addMsg(`<video src="${data.src}" controls playsinline></video>`, cls, true);
@@ -359,6 +399,12 @@ FAYE_HTML = """
             ws.send(JSON.stringify(msg));
             renderMessage({...msg, sender: MY_ROLE});
             input.value = '';
+        }
+
+        function sendCallLog(text) {
+            const msg = { type: 'call_log', text };
+            ws.send(JSON.stringify(msg));
+            renderMessage({...msg, sender: MY_ROLE});
         }
 
         function sendMedia(input) {
@@ -389,7 +435,7 @@ FAYE_HTML = """
                     mediaRecorder.start();
                     btn.style.color = '#ff3b30';
                 } catch(err) { 
-                    alert("Ошибка доступа к микрофону! Зайдите в Настройки телефона -> Приложения -> Chrome -> Разрешения -> Разрешить микрофон."); 
+                    alert("Разрешите микрофон в настройках браузера!"); 
                 }
             };
 
@@ -435,6 +481,15 @@ FAYE_HTML = """
             box.scrollTop = box.scrollHeight;
         }
 
+        function addCallLogMsg(text) {
+            const box = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'call-log-msg';
+            div.innerText = text;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
         function playNotifSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -462,20 +517,22 @@ FAYE_HTML = """
             if ("Notification" in window) {
                 Notification.requestPermission().then(p => {
                     if (p === 'granted') {
-                        new Notification("Калькулятор", { body: "Уведомления успешно включены! 🔔" });
+                        new Notification("Калькулятор", { body: "Уведомления включены! 🔔" });
                     } else {
                         alert("Уведомления заблокированы в настройках браузера!");
                     }
                 });
-            } else {
-                alert("Ваш браузер не поддерживает уведомления");
             }
         }
 
         function showNotification(data) {
             if ("Notification" in window && Notification.permission === "granted") {
-                new Notification("Секретное сообщение", { 
-                    body: data.type === 'text' ? data.text : 'Новое медиасообщение 📎',
+                let text = 'Новое сообщение';
+                if (data.type === 'text') text = data.text;
+                if (data.type === 'call_log') text = data.text;
+                
+                new Notification("Калькулятор", { 
+                    body: text,
                     icon: 'https://cdn-icons-png.flaticon.com/512/3658/3658932.png'
                 });
             }
@@ -502,8 +559,9 @@ FAYE_HTML = """
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 ws.send(JSON.stringify({ type: 'webrtc_offer', offer }));
+                callStartTime = Date.now();
             } catch(e) { 
-                alert("Ошибка доступа к камере или микрофону! Проверьте разрешения Chrome."); 
+                alert("Ошибка доступа к камере или микрофону!"); 
             }
         }
 
@@ -528,6 +586,7 @@ FAYE_HTML = """
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 ws.send(JSON.stringify({ type: 'webrtc_answer', answer }));
+                callStartTime = Date.now();
             } catch(e) { 
                 alert("Не удалось включить камеру/микрофон."); 
                 closeCallUI(); 
@@ -538,6 +597,7 @@ FAYE_HTML = """
             stopRingtone();
             document.getElementById('incoming-modal').style.display = 'none';
             ws.send(JSON.stringify({ type: 'webrtc_end' }));
+            sendCallLog("📞 Пропущенный видеовызов");
             pendingOffer = null;
         }
 
@@ -551,6 +611,14 @@ FAYE_HTML = """
 
         function endCall() {
             ws.send(JSON.stringify({ type: 'webrtc_end' }));
+            if (callStartTime) {
+                const durationSec = Math.round((Date.now() - callStartTime) / 1000);
+                const mins = Math.floor(durationSec / 60);
+                const secs = durationSec % 60;
+                sendCallLog(`📹 Видеовызов завершен (${mins > 0 ? mins + ' мин ' : ''}${secs} сек)`);
+            } else {
+                sendCallLog("📹 Видеовызов завершен");
+            }
             closeCallUI();
         }
 
@@ -560,6 +628,7 @@ FAYE_HTML = """
             if (pc) pc.close();
             document.getElementById('incoming-modal').style.display = 'none';
             document.getElementById('call-modal').style.display = 'none';
+            callStartTime = null;
         }
     </script>
 </body>
