@@ -58,6 +58,30 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# --- МАРШРУТ ДЛЯ ПРЕВРАЩЕНИЯ В НАСТОЯЩЕЕ ПРИЛОЖЕНИЕ (PWA MANIFEST) ---
+@app.get("/manifest.json")
+async def get_manifest():
+    return {
+        "name": "Калькулятор",
+        "short_name": "Калькулятор",
+        "start_url": "/faye",
+        "display": "standalone",
+        "background_color": "#000000",
+        "theme_color": "#17212b",
+        "icons": [
+            {
+                "src": "https://cdn-icons-png.flaticon.com/512/3658/3658932.png",
+                "sizes": "192x192",
+                "type": "image/png"
+            },
+            {
+                "src": "https://cdn-icons-png.flaticon.com/512/3658/3658932.png",
+                "sizes": "512x512",
+                "type": "image/png"
+            }
+        ]
+    }
+
 @app.get("/faye", response_class=HTMLResponse)
 async def get_faye_page():
     return FAYE_HTML
@@ -94,7 +118,7 @@ async def websocket_endpoint(websocket: WebSocket, device_key: str = ""):
     except WebSocketDisconnect:
         manager.disconnect(user_role, websocket)
 
-# --- ШАБЛОН ЧАТА В СТИЛЕ TELEGRAM ---
+# --- ШАБЛОН ЧАТА В СТИЛЕ TELEGRAM С ПОДДЕРЖКОЙ УСТАНОВКИ ---
 FAYE_HTML = """
 <!DOCTYPE html>
 <html lang="ru">
@@ -102,7 +126,7 @@ FAYE_HTML = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
-    <!-- PWA ТЕГИ ДЛЯ ПРЕВРАЩЕНИЯ В ПРИЛОЖЕНИЕ -->
+    <link rel="manifest" href="/manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Калькулятор">
@@ -114,7 +138,6 @@ FAYE_HTML = """
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
         html, body { height: 100dvh; background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
         
-        /* КАЛЬКУЛЯТОР */
         #calc-screen { display: flex; flex-direction: column; justify-content: flex-end; height: 100dvh; padding: 16px 20px 28px; background: #000; }
         .calc-display { color: #fff; font-size: 52px; text-align: right; margin-bottom: 16px; min-height: 65px; word-wrap: break-word; font-weight: 300; }
         .calc-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
@@ -123,7 +146,6 @@ FAYE_HTML = """
         .btn-op { background: #ff9f0a; }
         .btn-top { background: #a5a5a5; color: #000; }
 
-        /* TELEGRAM DARK CHAT */
         #chat-screen { display: none; flex-direction: column; height: 100dvh; background: #0e1621; background-image: radial-gradient(circle at 50% 50%, rgba(24, 37, 51, 0.4) 0%, rgba(14, 22, 33, 0.9) 100%); }
         
         .header { padding: 35px 16px 10px; background: #17212b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #101721; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
@@ -153,7 +175,6 @@ FAYE_HTML = """
         .btn-send { background: #5288c1; border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .btn-send svg { width: 18px; height: 18px; fill: #fff; margin-left: 2px; }
 
-        /* ВХОДЯЩИЙ ВЫЗОВ МОДАЛКА */
         #incoming-modal { display: none; position: fixed; inset: 0; background: rgba(14, 22, 33, 0.95); z-index: 200; flex-direction: column; align-items: center; justify-content: center; gap: 30px; text-align: center; }
         .caller-avatar { width: 100px; height: 100px; border-radius: 50%; background: linear-gradient(135deg, #0088cc, #39b54a); display: flex; align-items: center; justify-content: center; font-size: 42px; font-weight: bold; animation: pulse 1.8s infinite; }
         @keyframes pulse { 0% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(82, 136, 193, 0.7); } 70% { transform: scale(1.05); box-shadow: 0 0 0 25px rgba(82, 136, 193, 0); } 100% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(82, 136, 193, 0); } }
@@ -164,7 +185,6 @@ FAYE_HTML = """
         .btn-accept { background: #34c759; box-shadow: 0 4px 15px rgba(52, 199, 89, 0.4); }
         .btn-decline { background: #ff3b30; box-shadow: 0 4px 15px rgba(255, 59, 48, 0.4); }
 
-        /* ОКНО АКТИВНОГО ВИДЕОВЫЗОВА */
         #call-modal { display: none; position: fixed; inset: 0; background: #000; z-index: 100; flex-direction: column; }
         #remote-video { width: 100%; height: 100%; object-fit: cover; background: #111; }
         #local-video { position: absolute; top: 40px; right: 16px; width: 105px; height: 155px; border-radius: 12px; object-fit: cover; border: 2px solid rgba(255,255,255,0.8); background: #222; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
@@ -174,7 +194,6 @@ FAYE_HTML = """
 </head>
 <body>
 
-    <!-- КАЛЬКУЛЯТОР -->
     <div id="calc-screen">
         <div class="calc-display" id="display">0</div>
         <div class="calc-grid">
@@ -200,7 +219,6 @@ FAYE_HTML = """
         </div>
     </div>
 
-    <!-- TELEGRAM ЧАТ -->
     <div id="chat-screen">
         <div class="header">
             <div class="header-left">
@@ -247,7 +265,6 @@ FAYE_HTML = """
 
     <input type="file" id="bgInput" accept="image/*" style="display:none" onchange="setBg(this)">
 
-    <!-- ОКНО ВХОДЯЩЕГО ЗВОНКА -->
     <div id="incoming-modal">
         <div class="caller-avatar" id="caller-av">A</div>
         <div>
@@ -260,7 +277,6 @@ FAYE_HTML = """
         </div>
     </div>
 
-    <!-- ОКНО АКТИВНОГО ЗВОНКА -->
     <div id="call-modal">
         <video id="remote-video" autoplay playsinline></video>
         <video id="local-video" autoplay playsinline muted></video>
@@ -420,7 +436,6 @@ FAYE_HTML = """
             box.scrollTop = box.scrollHeight;
         }
 
-        // ЗВУКИ И УВЕДОМЛЕНИЯ
         function playNotifSound() {
             try {
                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -455,7 +470,6 @@ FAYE_HTML = """
             }
         }
 
-        /* WEBRTC ВИДЕОВЫЗОВ */
         function createPeerConnection() {
             pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] });
             pc.onicecandidate = e => e.candidate && ws.send(JSON.stringify({ type: 'webrtc_ice', candidate: e.candidate }));
@@ -536,7 +550,6 @@ FAYE_HTML = """
 </html>
 """
 
-# --- ШАБЛОН ДЛЯ AMIR (С ТАКИМ ЖЕ ДИЗАЙНОМ И ФУНКЦИЯМИ) ---
 AMIR_HTML = FAYE_HTML.replace("key_faye_phone_7730", "key_amir_pc_9981").replace("faye", "amir").replace("Любимый", "Любимая").replace("id=\"avatar-icon\">L", "id=\"avatar-icon\">F")
 
 if __name__ == "__main__":
