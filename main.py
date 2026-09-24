@@ -58,7 +58,6 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# --- МАРШРУТ ДЛЯ ПРЕВРАЩЕНИЯ В НАСТОЯЩЕЕ ПРИЛОЖЕНИЕ (PWA MANIFEST) ---
 @app.get("/manifest.json")
 async def get_manifest():
     return {
@@ -118,7 +117,6 @@ async def websocket_endpoint(websocket: WebSocket, device_key: str = ""):
     except WebSocketDisconnect:
         manager.disconnect(user_role, websocket)
 
-# --- ШАБЛОН ЧАТА В СТИЛЕ TELEGRAM С ПОДДЕРЖКОЙ УСТАНОВКИ ---
 FAYE_HTML = """
 <!DOCTYPE html>
 <html lang="ru">
@@ -136,7 +134,7 @@ FAYE_HTML = """
     <title>Калькулятор</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-tap-highlight-color: transparent; }
-        html, body { height: 100dvh; background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; overflow: hidden; }
+        html, body { height: 100dvh; background: #000; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
         
         #calc-screen { display: flex; flex-direction: column; justify-content: flex-end; height: 100dvh; padding: 16px 20px 28px; background: #000; }
         .calc-display { color: #fff; font-size: 52px; text-align: right; margin-bottom: 16px; min-height: 65px; word-wrap: break-word; font-weight: 300; }
@@ -146,9 +144,9 @@ FAYE_HTML = """
         .btn-op { background: #ff9f0a; }
         .btn-top { background: #a5a5a5; color: #000; }
 
-        #chat-screen { display: none; flex-direction: column; height: 100dvh; background: #0e1621; background-image: radial-gradient(circle at 50% 50%, rgba(24, 37, 51, 0.4) 0%, rgba(14, 22, 33, 0.9) 100%); }
+        #chat-screen { display: none; flex-direction: column; height: 100dvh; background: #0e1621; }
         
-        .header { padding: 35px 16px 10px; background: #17212b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #101721; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+        .header { padding: 35px 16px 10px; background: #17212b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #101721; z-index: 10; }
         .header-left { display: flex; align-items: center; gap: 12px; }
         .avatar { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #0088cc, #39b54a); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; color: #fff; }
         .header-info { text-align: left; }
@@ -158,12 +156,12 @@ FAYE_HTML = """
         .status-text { color: #7f91a4; font-size: 12px; }
         
         .header-actions { display: flex; gap: 16px; align-items: center; }
-        .icon-btn { background: none; border: none; color: #6c7e94; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; transition: color 0.2s; }
-        .icon-btn:active, .icon-btn:hover { color: #5288c1; }
+        .icon-btn { background: none; border: none; color: #6c7e94; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; }
+        .icon-btn:active { color: #5288c1; }
         .icon-btn svg { width: 22px; height: 22px; fill: currentColor; }
 
         .messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
-        .msg { padding: 9px 13px; border-radius: 16px; max-width: 80%; font-size: 15px; word-break: break-word; line-height: 1.35; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .msg { padding: 9px 13px; border-radius: 16px; max-width: 80%; font-size: 15px; word-break: break-word; line-height: 1.35; position: relative; }
         .my { background: #2b5278; align-self: flex-end; color: #fff; border-bottom-right-radius: 4px; }
         .their { background: #182533; align-self: flex-start; color: #f5f5f5; border-bottom-left-radius: 4px; }
         .msg img, .msg video { max-width: 100%; border-radius: 12px; margin-top: 4px; display: block; }
@@ -171,7 +169,6 @@ FAYE_HTML = """
 
         .input-bar { padding: 8px 12px 20px; background: #17212b; display: flex; gap: 10px; align-items: center; border-top: 1px solid #101721; }
         .input-bar input[type="text"] { flex: 1; background: #0e1621; border: 1px solid #242f3d; color: #fff; padding: 10px 16px; border-radius: 22px; font-size: 15px; outline: none; }
-        .input-bar input[type="text"]:focus { border-color: #5288c1; }
         .btn-send { background: #5288c1; border: none; color: #fff; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
         .btn-send svg { width: 18px; height: 18px; fill: #fff; margin-left: 2px; }
 
@@ -182,14 +179,14 @@ FAYE_HTML = """
         .caller-sub { font-size: 14px; color: #7f91a4; margin-top: 6px; }
         .call-buttons { display: flex; gap: 40px; margin-top: 20px; }
         .btn-call-act { width: 68px; height: 68px; border-radius: 50%; border: none; color: #fff; font-size: 26px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .btn-accept { background: #34c759; box-shadow: 0 4px 15px rgba(52, 199, 89, 0.4); }
-        .btn-decline { background: #ff3b30; box-shadow: 0 4px 15px rgba(255, 59, 48, 0.4); }
+        .btn-accept { background: #34c759; }
+        .btn-decline { background: #ff3b30; }
 
         #call-modal { display: none; position: fixed; inset: 0; background: #000; z-index: 100; flex-direction: column; }
         #remote-video { width: 100%; height: 100%; object-fit: cover; background: #111; }
-        #local-video { position: absolute; top: 40px; right: 16px; width: 105px; height: 155px; border-radius: 12px; object-fit: cover; border: 2px solid rgba(255,255,255,0.8); background: #222; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        #local-video { position: absolute; top: 40px; right: 16px; width: 105px; height: 155px; border-radius: 12px; object-fit: cover; border: 2px solid rgba(255,255,255,0.8); background: #222; }
         .call-controls { position: absolute; bottom: 40px; width: 100%; display: flex; justify-content: center; gap: 30px; }
-        .end-call-btn { background: #ff3b30; width: 64px; height: 64px; border-radius: 50%; border: none; color: #fff; font-size: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 15px rgba(255, 59, 48, 0.5); }
+        .end-call-btn { background: #ff3b30; width: 64px; height: 64px; border-radius: 50%; border: none; color: #fff; font-size: 26px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     </style>
 </head>
 <body>
@@ -391,7 +388,9 @@ FAYE_HTML = """
                     mediaRecorder.ondataavailable = ev => audioChunks.push(ev.data);
                     mediaRecorder.start();
                     btn.style.color = '#ff3b30';
-                } catch(err) { alert("Включите микрофон в настройках!"); }
+                } catch(err) { 
+                    alert("Ошибка доступа к микрофону! Зайдите в Настройки телефона -> Приложения -> Chrome -> Разрешения -> Разрешить микрофон."); 
+                }
             };
 
             const stop = (e) => {
@@ -461,12 +460,24 @@ FAYE_HTML = """
 
         function reqNotify() {
             if ("Notification" in window) {
-                Notification.requestPermission().then(p => alert(p==='granted'?'Уведомления включены!':'Уведомления отклонены'));
+                Notification.requestPermission().then(p => {
+                    if (p === 'granted') {
+                        new Notification("Калькулятор", { body: "Уведомления успешно включены! 🔔" });
+                    } else {
+                        alert("Уведомления заблокированы в настройках браузера!");
+                    }
+                });
+            } else {
+                alert("Ваш браузер не поддерживает уведомления");
             }
         }
+
         function showNotification(data) {
             if ("Notification" in window && Notification.permission === "granted") {
-                new Notification("Секретное сообщение", { body: data.type==='text'?data.text:'Новое медиафайлы' });
+                new Notification("Секретное сообщение", { 
+                    body: data.type === 'text' ? data.text : 'Новое медиасообщение 📎',
+                    icon: 'https://cdn-icons-png.flaticon.com/512/3658/3658932.png'
+                });
             }
         }
 
@@ -491,7 +502,9 @@ FAYE_HTML = """
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 ws.send(JSON.stringify({ type: 'webrtc_offer', offer }));
-            } catch(e) { alert("Камера/Микрофон недоступны!"); }
+            } catch(e) { 
+                alert("Ошибка доступа к камере или микрофону! Проверьте разрешения Chrome."); 
+            }
         }
 
         function showIncomingCall(offer) {
@@ -515,7 +528,10 @@ FAYE_HTML = """
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 ws.send(JSON.stringify({ type: 'webrtc_answer', answer }));
-            } catch(e) { alert("Не удалось открыть камеру"); closeCallUI(); }
+            } catch(e) { 
+                alert("Не удалось включить камеру/микрофон."); 
+                closeCallUI(); 
+            }
         }
 
         function declineCall() {
